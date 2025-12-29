@@ -74,10 +74,23 @@ Students may install:
 
 ---
 
-### For Apple Silicon Users or for Lightweight Environments: Docker
+### Alternative: Docker (AMDx86_64 & ARM64)
 
 ```bash
+# For Windows & Mac
 docker pull ghcr.io/dsoyolo/cybersec-labs/cybersec-lab:latest
+docker run -it --rm cybersec-lab
+```
+
+```bash
+# ALternative: Build locally
+git clone https://github.com/dsoyolo/cybersec-labs.git
+cd cybersec-labs/environments/docker
+
+# Build natively
+docker build -t cybersec-lab .
+
+# Run it
 docker run -it --rm cybersec-lab
 ```
 

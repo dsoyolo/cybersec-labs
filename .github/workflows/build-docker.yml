@@ -46,7 +46,9 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        images: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          ${{ env.REGISTRY }}/${{ github.repository_owner }}/cybersec-lab
         tags: |
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
@@ -69,7 +71,7 @@ jobs:
       run: |
         IMAGE_TAG="${{ steps.meta.outputs.version }}"
         echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
-        echo "📦 Docker image published!"
+        echo "Docker image published!"
         echo "Pull with: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$IMAGE_TAG"
         echo "Or: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
     

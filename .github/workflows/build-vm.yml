@@ -1,0 +1,147 @@
+name: Build Ubuntu Security VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Setup Packer
+      uses: hashicorp/setup-packer@main
+      with:
+        version: 'latest'
+    
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y virtualbox
+        
+        # Install Vagrant from HashiCorp
+        wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+        sudo apt-get update
+        sudo apt-get install -y vagrant
+
+    - name: Verify installations
+      run: |
+        packer --version
+        vagrant --version
+        VBoxManage --version
+        
+    - name: Initialize Packer
+      working-directory: environments/ubuntu-vm/packer
+      run: packer init ubuntu-vagrant.pkr.hcl
+      
+    - name: Validate Packer configuration
+      working-directory: environments/ubuntu-vm/packer
+      run: packer validate ubuntu-vagrant.pkr.hcl
+      
+    - name: Build VM with Packer
+      working-directory: environments/ubuntu-vm/packer
+      env:
+        PACKER_LOG: 1
+        CHECKPOINT_DISABLE: 1
+      run: |
+        echo "🔨 Starting VM build with Vagrant builder (10-20 minutes)..."
+        echo "Build started at: $(date)"
+        
+        packer build -timestamp-ui ubuntu-vagrant.pkr.hcl
+        
+        echo "Build completed at: $(date)"
+
+    - name: Rename box file to tar.gz
+      working-directory: environments/ubuntu-vm/packer
+      run: |
+        # Find and rename the box file
+        BOX_FILE=$(find output-ubuntu-vm -name "*.box" | head -1)
+        mkdir -p ../dist
+        cp "$BOX_FILE" ../dist/ubuntu-vm.tar.gz
+        echo "Renamed to .tar.gz for easier extraction"
+        ls -lh ../dist/
+
+    - name: Get file info
+      id: box_info
+      working-directory: environments/ubuntu-vm/dist
+      run: |
+        FILE="ubuntu-vm.tar.gz"
+        FILE_SIZE=$(ls -lh $FILE | awk '{print $5}')
+        FILE_SIZE_MB=$(du -m $FILE | cut -f1)
+        FILE_SHA256=$(sha256sum $FILE | cut -d' ' -f1)
+        
+        echo "size=$FILE_SIZE" >> $GITHUB_OUTPUT
+        echo "size_mb=$FILE_SIZE_MB" >> $GITHUB_OUTPUT
+        echo "sha256=$FILE_SHA256" >> $GITHUB_OUTPUT
+        
+        echo "File: $FILE_SIZE ($FILE_SIZE_MB MB)"
+        echo "SHA256: $FILE_SHA256"
+        
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: Ubuntu Security VM ${{ steps.version.outputs.version }}
+        files: environments/ubuntu-vm/dist/ubuntu-vm.tar.gz
+        body: |
+          # Ubuntu Security VM - ${{ steps.version.outputs.version }}
+          
+          A pre-configured Ubuntu 22.04 LTS virtual machine with cybersecurity tools installed and ready to use.
+          
+          ## Build Information
+          
+          - **File Size:** ${{ steps.box_info.outputs.size }} (${{ steps.box_info.outputs.size_mb }} MB)
+          - **SHA256:** `${{ steps.box_info.outputs.sha256 }}`
+          - **Build Method:** Vagrant builder extending official Ubuntu box
+          - **Built:** ${{ github.run_id }} on ${{ github.run_number }}
+          - **Ubuntu Version:** 22.04.5 LTS
+          
+          ---
+          
+          **Built with:** GitHub Actions
+          **License:** Educational use only
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Upload artifact (backup)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ubuntu-vm-${{ steps.version.outputs.version }}
+        path: environments/ubuntu-vm/dist/ubuntu-vm.tar.gz
+        retention-days: 120
+        
+    - name: Build summary
+      run: |
+        echo "## ✅ Build Complete!" >> $GITHUB_STEP_SUMMARY
+        echo "### 🎉 Release Created!" >> $GITHUB_STEP_SUMMARY
+        echo "The .box file is available at:" >> $GITHUB_STEP_SUMMARY
+        echo "**[${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }})**" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

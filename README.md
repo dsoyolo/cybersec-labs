@@ -78,8 +78,8 @@ Students may install:
 
 ```bash
 # For Windows & Mac
-docker pull ghcr.io/dsoyolo/cybersec-labs/cybersec-lab:latest
-docker run -it --rm cybersec-lab
+docker pull ghcr.io/dsoyolo/cybersec-lab:latest
+docker run -it --rm ghcr.io/dsoyolo/cybersec-lab
 ```
 
 ```bash
